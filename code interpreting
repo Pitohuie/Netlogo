@@ -1,0 +1,110 @@
+globals
+[avg-degree]  ; 全局变量，用于控制网络平均度
+
+turtles-own
+[
+  infected?           ;; 是否感染
+  resistant?          ;; 是否抗病
+  virus-check-timer   ;; 距离上次病毒检查的时钟周期
+]
+
+to setup
+  clear-all
+  reset-ticks
+  set avg-degree 5  ; 设置网络平均度
+  set-default-shape turtles "person"  ; 设置代理的默认形状
+  setup-nodes  ; 初始化节点
+  create-connections ; 创建网络连接
+  ask n-of 拒绝参与居民人数 turtles
+    [ become-infected ]  ; 将一些居民设置为拒绝参与态度的B类居民
+  ask n-of 具有参与行为居民人数 turtles
+    [ become-resistant ]  ; 将一些居民设置为愿意参与态度的A类居民
+  ask n-of 中立态度居民人数 turtles
+    [ become-susceptible ]  ; 将一些居民设置为中立态度的N类居民
+  ask links [ set color white ]  ; 设置连接的颜色为白色
+end
+
+to create-connections
+  ask turtles [
+    let available-links avg-degree - count my-links
+    let my-neighbors turtles in-radius 影响半径 with [self != myself]
+    
+    ; 去除已经连接的邻居
+    set my-neighbors my-neighbors with [not link-neighbor? myself]
+    
+    ; 根据可用的连接数，连接到最近的未连接邻居
+    repeat available-links [
+      ifelse any? my-neighbors [
+        let closest-neighbor min-one-of my-neighbors [distance myself]
+        create-link-with closest-neighbor
+        set my-neighbors my-neighbors with [not link-neighbor? closest-neighbor]
+      ] [
+        stop
+      ]
+    ]
+  ]
+end
+
+to setup-nodes
+  set-default-shape turtles "person"  ; 设置代理的默认形状
+  create-turtles 居民总数
+  [
+    ; for visual reasons, we don't put any nodes *too* close to the edges
+    setxy (random-xcor * 0.95) (random-ycor * 0.95)
+    become-susceptible  ; 初始化居民为中立态度的N类居民
+    set virus-check-timer random 10
+    ;不安全行为检查频率
+  ]
+end
+
+to go
+  if all? turtles [  resistant?]
+    [ stop ]
+  ask turtles
+  [
+     set virus-check-timer virus-check-timer + 1
+     if virus-check-timer >= 10
+     ;不安全行为检查频率
+       [ set virus-check-timer 0 ]
+  ]
+  spread-virus
+  do-virus-checks
+  create-connections
+  tick
+end
+
+to become-infected  ;; 使代理变为感染状态
+  set infected? true
+  set resistant? false
+  set color blue
+end
+
+to become-susceptible  ;; 使代理变为中立态度的N类居民
+  set infected? false
+  set resistant? false
+  set color gray
+end
+
+to become-resistant  ;; 使代理变为愿意参与态度的A类居民
+  set infected? false
+  set resistant? true
+  set color red
+  ask my-links [ set color gray - 2 ]
+end
+
+to spread-virus
+  ask turtles with [infected?]
+    [ ask link-neighbors with [not resistant?]
+        [ if random-float 100 < 转变为拒绝态度的概率α
+            [ become-infected ] ] ]
+end
+
+to do-virus-checks
+  ask turtles with [  resistant? and virus-check-timer = 0]
+    [ ask link-neighbors with [not infected? and not resistant?]
+        [ if random-float 100 < 转变为参与态度的概率β
+        [become-resistant ] ]
+    ask link-neighbors with [infected?]
+      [ if random-float 100 < 转变为中立态度的概率γ
+        [become-susceptible ]]]
+end
